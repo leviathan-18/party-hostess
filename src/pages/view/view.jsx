@@ -111,6 +111,7 @@ const EventStaffProfile = () => {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [recordedAudio, setRecordedAudio] = useState(null)
+  const [voiceNotes, setVoiceNotes] = useState([])
   const [recordingTimerInterval, setRecordingTimerInterval] = useState(null)
   const [deleteConfirmImage, setDeleteConfirmImage] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -514,6 +515,12 @@ const EventStaffProfile = () => {
     event.target.value = ''
   }
 
+  const handleSelectImage = (img) => {
+    // swap clicked thumbnail with current main image
+    setThumbnailImages((current) => current.map((item) => (item === img ? mainImageSrc : item)))
+    setMainImageSrc(img)
+  }
+
   const confirmDeleteThumbnail = (imageSrc) => {
     setDeleteConfirmImage(imageSrc)
     setShowDeleteConfirm(true)
@@ -584,6 +591,11 @@ const EventStaffProfile = () => {
       setRecordingTimerInterval(timerInterval)
     } catch (error) {
       console.error('Error accessing microphone:', error)
+      if (error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) {
+        alert('Microphone access denied. Please allow microphone permission in your browser settings to record a voice note.')
+      } else {
+        alert('Unable to access microphone. Please check your device and try again.')
+      }
     }
   }
 
@@ -620,7 +632,14 @@ const EventStaffProfile = () => {
 
   const saveVoiceNote = () => {
     if (recordedAudio) {
-      console.log('Voice note saved:', recordedAudio)
+      const note = {
+        id: Date.now(),
+        url: recordedAudio,
+        duration: recordingDuration,
+        name: `Voice_Note_Recording_${Date.now()}.mp3`
+      }
+
+      setVoiceNotes((current) => [note, ...current])
       closeVoiceNoteModal()
     }
   }
@@ -683,6 +702,40 @@ const EventStaffProfile = () => {
             className="photo-input-hidden"
           />
 
+          {voiceNotes.length > 0 && (
+            <div className="voice-notes-list">
+              {voiceNotes.map((note) => (
+                <div key={note.id} className="voice-note-item">
+                  <button
+                    type="button"
+                    className="voice-note-play"
+                    onClick={() => {
+                      const audioEl = document.getElementById(`audio-${note.id}`)
+                      if (audioEl) {
+                        if (audioEl.paused) {
+                          audioEl.play()
+                        } else {
+                          audioEl.pause()
+                        }
+                      }
+                    }}
+                    aria-label="Play voice note"
+                  >
+                    ▶
+                  </button>
+
+                  <div className="voice-note-meta">
+                    <div className="voice-note-name">{note.name.replace(/_\d+/, '')}</div>
+                    <div className="voice-note-duration">{Math.floor(note.duration / 60).toString().padStart(2, '0')}:{(note.duration % 60).toString().padStart(2, '0')}</div>
+                  </div>
+
+                  <button type="button" className="voice-note-delete" onClick={() => setVoiceNotes((current) => current.filter(n => n.id !== note.id))} aria-label="Delete voice note">🗑️</button>
+                  <audio id={`audio-${note.id}`} src={note.url} style={{ display: 'none' }} />
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="thumb-slider-row">
             <div className="thumb-strip">
               {thumbnailImages.map((img, index) => (
@@ -690,7 +743,7 @@ const EventStaffProfile = () => {
                   <button
                     type="button"
                     className="thumb"
-                    onClick={() => setMainImageSrc(img)}
+                    onClick={() => handleSelectImage(img)}
                     aria-label={`Select image ${index + 1}`}
                     style={{ backgroundImage: `url(${img})` }}
                   />
