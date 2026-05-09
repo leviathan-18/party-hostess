@@ -12,6 +12,11 @@ import partyImg from './images/party.png'
 import toplessImg from './images/topless.png'
 import notePencilImg from './images/NotePencil.png'
 import deleteImg from './images/delete.png'
+import calendarDotsImg from './images/CalendarDots.png'
+import calendarCheckImg from './images/CalendarCheck.png'
+import microphoneImg from './images/Microphone.png'
+import starImg from './images/star.png'
+import tickImg from './images/tick.png'
 import './view.css'
 
 const confidenceOptions = ['Comfortable', 'Confident', 'Very Confident']
@@ -36,6 +41,14 @@ const languageOptions = [
 ]
 
 const bodyTypeOptions = ['Slim', 'Athletic', 'Curvy', 'Average', 'Petite', 'Tall', 'Plus Size', 'Pocket Rocket']
+
+const debounce = (func, delay) => {
+  let timeoutId
+  return (...args) => {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => func(...args), delay)
+  }
+}
 
 const availabilityDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const availabilitySlots = ['Morning', 'Afternoon', 'Evening']
@@ -105,14 +118,21 @@ const EventStaffProfile = () => {
   const photoInputRef = useRef(null)
   const voiceNoteInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
+  const savedVoiceAudioRef = useRef(null)
   const audioChunksRef = useRef([])
 
   const [isVoiceNoteModalOpen, setIsVoiceNoteModalOpen] = useState(false)
+  const [voiceNoteMode, setVoiceNoteMode] = useState('record')
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [recordedAudio, setRecordedAudio] = useState(null)
-  const [voiceNotes, setVoiceNotes] = useState([])
+  const [voiceNoteDraftName, setVoiceNoteDraftName] = useState('')
+  const [voiceNotes, setVoiceNotes] = useState(() => readStoredValue('party-hostess-voice-notes', []))
+  const [isVoicePlaying, setIsVoicePlaying] = useState(false)
+  const [voiceCurrentTime, setVoiceCurrentTime] = useState(0)
+  const [voiceDuration, setVoiceDuration] = useState(0)
   const [recordingTimerInterval, setRecordingTimerInterval] = useState(null)
+  const debouncedSeek = useRef(null)
   const [deleteConfirmImage, setDeleteConfirmImage] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [thumbnailImages, setThumbnailImages] = useState([one, two, three, four])
@@ -541,6 +561,15 @@ const EventStaffProfile = () => {
   }
 
   const openVoiceNoteModal = () => {
+    if (voiceNotes.length > 0) {
+      alert('You already have a saved voice note. Please delete it first before recording a new one.')
+      return
+    }
+
+    setVoiceNoteMode('record')
+    setRecordingDuration(0)
+    setRecordedAudio(null)
+    setVoiceNoteDraftName('')
     setIsVoiceNoteModalOpen(true)
   }
 
@@ -549,8 +578,10 @@ const EventStaffProfile = () => {
       stopRecording()
     }
     setIsVoiceNoteModalOpen(false)
+    setVoiceNoteMode('record')
     setRecordingDuration(0)
     setRecordedAudio(null)
+    setVoiceNoteDraftName('')
     audioChunksRef.current = []
   }
 
@@ -571,6 +602,7 @@ const EventStaffProfile = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
         const audioUrl = URL.createObjectURL(audioBlob)
         setRecordedAudio(audioUrl)
+        setVoiceNoteDraftName('Voice_Note_Recording.mp3')
         stream.getTracks().forEach(track => track.stop())
       }
 
@@ -627,6 +659,8 @@ const EventStaffProfile = () => {
 
     const audioUrl = URL.createObjectURL(files[0])
     setRecordedAudio(audioUrl)
+    setVoiceNoteDraftName(files[0].name)
+    setRecordingDuration(0)
     event.target.value = ''
   }
 
@@ -636,13 +670,31 @@ const EventStaffProfile = () => {
         id: Date.now(),
         url: recordedAudio,
         duration: recordingDuration,
-        name: `Voice_Note_Recording_${Date.now()}.mp3`
+        name: voiceNoteDraftName || 'Voice_Note_Recording.mp3'
       }
 
-      setVoiceNotes((current) => [note, ...current])
+      setVoiceNotes([note])
+      setIsVoicePlaying(false)
+      setVoiceCurrentTime(0)
+      setVoiceDuration(0)
       closeVoiceNoteModal()
     }
   }
+
+  useEffect(() => {
+    writeStoredValue('party-hostess-voice-notes', voiceNotes)
+  }, [voiceNotes])
+
+  useEffect(() => {
+    if (!debouncedSeek.current) {
+      debouncedSeek.current = debounce((time) => {
+        const audioEl = savedVoiceAudioRef.current
+        if (audioEl && voiceNotes.length > 0) {
+          audioEl.currentTime = time
+        }
+      }, 50)
+    }
+  }, [voiceNotes])
 
   useEffect(() => {
     writeStoredValue('party-hostess-rate-options', rateOptions)
@@ -690,7 +742,104 @@ const EventStaffProfile = () => {
             <button className="icon-pill" type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openPhotoPicker(); }} aria-label="Camera">
               <img src={cameraImg} alt="Camera" style={{ width: '16px', height: '16px' }} />
             </button>
-            <button className="voice-note-btn" type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openVoiceNoteModal(); }}>Add Voice Note 🎤</button>
+            {voiceNotes.length === 0 && (
+              <button className="voice-note-btn" type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openVoiceNoteModal(); }}>
+                Add Voice Note
+                <img src={microphoneImg} alt="Microphone" style={{ width: '20px', height: '20px', marginLeft: '8px', verticalAlign: 'middle', filter: 'brightness(0) invert(1)' }} />
+              </button>
+            )}
+
+            {voiceNotes.length > 0 && (
+              <div className="voice-note-inline">
+                <button
+                  type="button"
+                  className="voice-note-play"
+                  onClick={() => {
+                    const audioEl = savedVoiceAudioRef.current
+
+                    if (!audioEl) {
+                      return
+                    }
+
+                    if (audioEl.paused) {
+                      audioEl.play().catch((error) => {
+                        console.error('Unable to play voice note:', error)
+                      })
+                    } else {
+                      audioEl.pause()
+                    }
+                  }}
+                  aria-label={isVoicePlaying ? 'Pause voice note' : 'Play voice note'}
+                >
+                  {isVoicePlaying ? '❚❚' : '▶'}
+                </button>
+
+                <div className="voice-note-meta">
+                  <div className="voice-note-name">{voiceNotes[0].name}</div>
+                  <div className="voice-note-duration">{Math.round(voiceCurrentTime)} / {Math.max(Math.round(voiceDuration || voiceNotes[0].duration), 1)} sec</div>
+                </div>
+
+                <input
+                  className="voice-note-seek"
+                  type="range"
+                  min="0"
+                  max={Math.max(voiceDuration || voiceNotes[0].duration || 0, 1)}
+                  step="0.1"
+                  value={Math.min(voiceCurrentTime, Math.max(voiceDuration || voiceNotes[0].duration || 0, 1))}
+                  onChange={(event) => {
+                    const nextTime = Number(event.target.value)
+                    setVoiceCurrentTime(nextTime)
+                    if (debouncedSeek.current) {
+                      debouncedSeek.current(nextTime)
+                    }
+                  }}
+                  aria-label="Seek voice note"
+                />
+
+                <button
+                  type="button"
+                  className="voice-note-delete"
+                  onClick={() => {
+                    const audioEl = savedVoiceAudioRef.current
+
+                    if (audioEl) {
+                      audioEl.pause()
+                      audioEl.currentTime = 0
+                    }
+                    setVoiceNotes([])
+                    setIsVoicePlaying(false)
+                    setVoiceCurrentTime(0)
+                    setVoiceDuration(0)
+                  }}
+                  aria-label="Delete voice note"
+                >
+                  <img src={deleteImg} alt="Delete" style={{ width: '16px', height: '16px' }} />
+                </button>
+                <audio
+                  ref={savedVoiceAudioRef}
+                  src={voiceNotes[0]?.url}
+                  preload="auto"
+                  onLoadedMetadata={() => {
+                    const audioEl = savedVoiceAudioRef.current
+                    if (audioEl) {
+                      setVoiceDuration(audioEl.duration || voiceNotes[0]?.duration || 0)
+                    }
+                  }}
+                  onPlay={() => setIsVoicePlaying(true)}
+                  onPause={() => setIsVoicePlaying(false)}
+                  onEnded={() => {
+                    setIsVoicePlaying(false)
+                    setVoiceCurrentTime(0)
+                  }}
+                  onTimeUpdate={() => {
+                    const audioEl = savedVoiceAudioRef.current
+                    if (audioEl) {
+                      setVoiceCurrentTime(audioEl.currentTime)
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           <input
@@ -701,40 +850,6 @@ const EventStaffProfile = () => {
             onChange={handlePhotoUpload}
             className="photo-input-hidden"
           />
-
-          {voiceNotes.length > 0 && (
-            <div className="voice-notes-list">
-              {voiceNotes.map((note) => (
-                <div key={note.id} className="voice-note-item">
-                  <button
-                    type="button"
-                    className="voice-note-play"
-                    onClick={() => {
-                      const audioEl = document.getElementById(`audio-${note.id}`)
-                      if (audioEl) {
-                        if (audioEl.paused) {
-                          audioEl.play()
-                        } else {
-                          audioEl.pause()
-                        }
-                      }
-                    }}
-                    aria-label="Play voice note"
-                  >
-                    ▶
-                  </button>
-
-                  <div className="voice-note-meta">
-                    <div className="voice-note-name">{note.name.replace(/_\d+/, '')}</div>
-                    <div className="voice-note-duration">{Math.floor(note.duration / 60).toString().padStart(2, '0')}:{(note.duration % 60).toString().padStart(2, '0')}</div>
-                  </div>
-
-                  <button type="button" className="voice-note-delete" onClick={() => setVoiceNotes((current) => current.filter(n => n.id !== note.id))} aria-label="Delete voice note">🗑️</button>
-                  <audio id={`audio-${note.id}`} src={note.url} style={{ display: 'none' }} />
-                </div>
-              ))}
-            </div>
-          )}
 
           <div className="thumb-slider-row">
             <div className="thumb-strip">
@@ -773,7 +888,7 @@ const EventStaffProfile = () => {
             <h2 className="reviews-title">
               Reviews
               <span className="reviews-rating-controls" aria-label="Set review rating">
-                {Array.from({ length: 5 }, (_, index) => {
+                {Array.from({ length: 1 }, (_, index) => {
                   const starNumber = index + 1
 
                   return (
@@ -784,11 +899,11 @@ const EventStaffProfile = () => {
                       onClick={() => setReviewRating(starNumber)}
                       aria-label={`Set rating to ${starNumber}`}
                     >
-                      ★
+                      <img src={starImg} alt="Star" style={{ width: '20px', height: '20px' }} />
                     </button>
                   )
                 })}
-                <strong>{reviewRating}.0/5</strong>
+                <strong>4.9/5</strong>
               </span>
               <em>(120 Reviews)</em>
             </h2>
@@ -800,7 +915,7 @@ const EventStaffProfile = () => {
                   <div className="review-stars" aria-label={`${review.stars} out of 5 stars`}>
                     {Array.from({ length: 5 }, (_, index) => (
                       <span key={index} className={`review-star ${review.stars >= index + 1 ? 'is-filled' : ''}`}>
-                        ★
+                        <img src={starImg} alt="Star" style={{ width: '16px', height: '16px' }} />
                       </span>
                     ))}
                   </div>
@@ -814,7 +929,14 @@ const EventStaffProfile = () => {
 
         <section className="right-side">
           <div className="rating-row">
-            <span>★★★★★ 5 (120 Reviews)</span>
+            <span>
+              <img src={starImg} alt="Star" style={{ width: '16px', height: '16px', display: 'inline', marginRight: '2px' }} />
+              <img src={starImg} alt="Star" style={{ width: '16px', height: '16px', display: 'inline', marginRight: '2px' }} />
+              <img src={starImg} alt="Star" style={{ width: '16px', height: '16px', display: 'inline', marginRight: '2px' }} />
+              <img src={starImg} alt="Star" style={{ width: '16px', height: '16px', display: 'inline', marginRight: '2px' }} />
+              <img src={starImg} alt="Star" style={{ width: '16px', height: '16px', display: 'inline', marginRight: '4px' }} />
+              5 (120 Reviews)
+            </span>
             <span>
               <img src={flagImg} alt="Australia" style={{ width: '25px', height: '20px', marginRight: '10px', verticalAlign: 'middle' }} />
               Sydney, NSW
@@ -822,24 +944,25 @@ const EventStaffProfile = () => {
           </div>
           <h1 className="profile-name" style={{ fontWeight: 'bold' }}>Samantha L.</h1>
 
-          <section className="profile-panel">
+          <section className={`profile-panel ${isAboutMeEditorOpen ? 'is-editing' : ''}`}>
             <div className="panel-header">
               <h2>About Me</h2>
               <button type="button" className="rates-edit-btn" onClick={isAboutMeEditorOpen ? closeAboutMeEditor : openAboutMeEditor} aria-label="Edit about me">
                 <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
               </button>
             </div>
-            <div className="about-me-content">
-              {aboutMeText.split('\n\n').map((paragraph, index) => (
-                <p key={index}>{paragraph}</p>
-              ))}
-            </div>
+            {!isAboutMeEditorOpen && (
+              <div className="about-me-content">
+                {aboutMeText.split('\n\n').map((paragraph, index) => (
+                  <p key={index}>{paragraph}</p>
+                ))}
+              </div>
+            )}
             {isAboutMeEditorOpen && (
               <div className="panel-inline-editor">
                 <header className="rates-editor-header">
                   <div>
                     <h3>About Me</h3>
-                    <p className="editor-subtitle">Tell your story</p>
                   </div>
                   <button type="button" className="rates-editor-close" onClick={closeAboutMeEditor} aria-label="Close about me editor">
                     ×
@@ -861,23 +984,25 @@ const EventStaffProfile = () => {
             )}
           </section>
 
-          <section className="profile-panel">
+          <section className={`profile-panel ${isTopSkillsEditorOpen ? 'is-editing' : ''}`}>
             <div className="panel-header">
               <h2>Top Skills</h2>
               <button type="button" className="rates-edit-btn" onClick={isTopSkillsEditorOpen ? closeTopSkillsEditor : openTopSkillsEditor} aria-label="Edit top skills">
                 <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
               </button>
             </div>
-            <div className="skills-grid">
-              {selectedTopSkills.map((skill) => (
-                <div key={skill.id} className="skill-item">
-                  {skillImageMap[skill.name] && (
-                    <img src={skillImageMap[skill.name]} alt={skill.name} className="skill-image" />
-                  )}
-                  <span className="skill-name">{skill.name}</span>
-                </div>
-              ))}
-            </div>
+            {!isTopSkillsEditorOpen && (
+              <div className="skills-grid">
+                {selectedTopSkills.map((skill) => (
+                  <div key={skill.id} className="skill-item">
+                    {skillImageMap[skill.name] && (
+                      <img src={skillImageMap[skill.name]} alt={skill.name} className="skill-image" />
+                    )}
+                    <span className="skill-name">{skill.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {isTopSkillsEditorOpen && (
               <div className="panel-inline-editor">
                 <header className="rates-editor-header">
@@ -885,9 +1010,6 @@ const EventStaffProfile = () => {
                     <h3>Top Skills</h3>
                     <p className="editor-subtitle">Select up to 4 top skills</p>
                   </div>
-                  <button type="button" className="rates-editor-close" onClick={closeTopSkillsEditor} aria-label="Close top skills editor">
-                    ×
-                  </button>
                 </header>
 
                 <div className="rates-editor-list cert-editor-list">
@@ -902,9 +1024,10 @@ const EventStaffProfile = () => {
                       <span>{skill.name}</span>
                     </label>
                   ))}
-
-                  <button type="button" className="rates-save-btn cert-save-btn" onClick={saveTopSkillsEditor}>save</button>
                 </div>
+                <footer className="rates-editor-footer">
+                  <button type="button" className="rates-save-btn cert-save-btn" onClick={saveTopSkillsEditor}>save</button>
+                </footer>
               </div>
             )}
           </section>
@@ -926,6 +1049,7 @@ const EventStaffProfile = () => {
                 <span className="toggle-knob" />
               </button>
             </div>
+            <hr style={{ borderColor: "#d9d9d9" }} />
             <div className="toggle-row">
               <span>Instant Book</span>
               <button
@@ -944,30 +1068,34 @@ const EventStaffProfile = () => {
             </div>
           </section>
 
-          <section className="profile-panel rates-panel">
+          <section className={`profile-panel rates-panel ${isRatesEditorOpen ? 'is-editing' : ''}`}>
             <div className="rates-head-row">
-              <h2>✓ Rates and Experience</h2>
+              <h2><span className="rates-head-tick">✓</span> Rates and Experience</h2>
               <button type="button" className="rates-edit-btn" onClick={isRatesEditorOpen ? closeRatesEditor : openRatesEditor} aria-label="Edit rates and experience">
                 <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
               </button>
             </div>
-            {rates.map((rate) => (
-              <article key={rate.id} className="rate-card" style={{ '--accent-color': rate.accentColor }}>
-                <div className="rate-head"><span>{rate.service}</span><strong>{rate.price}</strong></div>
-                <p>Experience Level: <strong>{rate.confidence}</strong></p>
-                <div className="experience-labels">
-                  <span>Comfortable</span>
-                  <span>Confident</span>
-                  <span>Very Confident</span>
-                </div>
-                <div className="level-track">
-                  {Array.from({ length: 3 }, (_, i) => (
-                    <span key={i} className={i < rate.experience ? '' : 'empty'} />
-                  ))}
-                </div>
-                <small>{rate.confidence} • {rate.eventsText}</small>
-              </article>
-            ))}
+            {!isRatesEditorOpen && (
+              <>
+                {rates.map((rate) => (
+                  <article key={rate.id} className="rate-card" style={{ '--accent-color': rate.accentColor }}>
+                    <div className="rate-head"><span>{rate.service}</span><strong>{rate.price}</strong></div>
+                    <p>Experience Level: </p>
+                    <div className="experience-labels">
+                      {['Comfortable', 'Confident', 'Very Confident'].map((label, index) => (
+                        <span key={label} className={index < rate.experience ? 'is-active' : ''}>{label}</span>
+                      ))}
+                    </div>
+                    <div className="level-track">
+                      {Array.from({ length: 3 }, (_, i) => (
+                        <span key={i} className={i < rate.experience ? '' : 'empty'} />
+                      ))}
+                    </div>
+                    <small className="completed-events-row"><img src={calendarCheckImg} alt="Completed events" />{rate.eventsText} completed</small>
+                  </article>
+                ))}
+              </>
+            )}
             {isRatesEditorOpen && (
               <div className="panel-inline-editor">
                 <header className="rates-editor-header">
@@ -1038,131 +1166,147 @@ const EventStaffProfile = () => {
             )}
           </section>
 
-          <section className="profile-panel available-dates-panel">
+          <section className={`profile-panel available-dates-panel ${isAvailabilityEditorOpen ? 'is-editing' : ''}`}>
             <div className="panel-header">
-              <h2>Available Dates</h2>
+              <h2><img className="panel-title-icon" src={calendarDotsImg} alt="Available dates" /> Available Dates</h2>
               <button type="button" className="rates-edit-btn" onClick={isAvailabilityEditorOpen ? closeAvailabilityEditor : openAvailabilityEditor} aria-label="Edit available dates">
                 <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
               </button>
             </div>
-            <div className="date-range">
-              <span className="date-highlight">{availableStartLabel} - {availableEndLabel}</span>
-            </div>
-            <p className="open-dates-text">{availableOpenDatesCount} open dates</p>
+            {!isAvailabilityEditorOpen && (
+              <>
+                <div className="date-range">
+                  <span className="date-highlight">{availableStartLabel} - {availableEndLabel}</span>
+                </div>
+                <p className="open-dates-text">{availableOpenDatesCount} open dates</p>
+              </>
+            )}
 
             {isAvailabilityEditorOpen && (
-              <div className="availability-inline-editor">
-                <header className="rates-editor-header availability-inline-header">
-                  <div>
-                    <h3>Available Dates</h3>
-                    <p className="editor-subtitle">Select the days and time slots you are available.</p>
-                  </div>
-                  <button type="button" className="rates-editor-close" onClick={closeAvailabilityEditor} aria-label="Close available dates editor">
-                    ×
-                  </button>
-                </header>
-
+              <>
                 {availabilityEditorStep === 'schedule' ? (
-                  <div className="availability-grid-view">
-                    <div className="availability-summary-row">
-                      <span>{formatDateLabel(todayStart)} - {formatDateLabel(viewedMonthLastDay)}</span>
-                      <strong>{viewedMonthDates.filter((date) => date >= todayStart).length} open dates</strong>
-                    </div>
+                  <div className="availability-inline-editor">
+                    <header className="rates-editor-header availability-inline-header">
+                      <div>
+                        <h3>Available Dates</h3>
+                        <p className="editor-subtitle">Select the days and time slots you are available.</p>
+                      </div>
+                    </header>
 
-                    <div className="availability-days-list">
-                      {availabilityDays.map((day) => (
-                        <div key={day} className="availability-day-row">
-                          <span className="availability-day-label">{day}</span>
-                          <div className="availability-slot-group">
-                            {availabilitySlots.map((slot) => {
-                              const isActive = (draftDayAvailability[day] || []).includes(slot)
+                    <div className="availability-grid-view">
+                      <div className="availability-summary-row">
+                        <span>{formatDateLabel(todayStart)} - {formatDateLabel(viewedMonthLastDay)}</span>
+                        <strong>{viewedMonthDates.filter((date) => date >= todayStart).length} open dates</strong>
+                      </div>
 
-                              return (
-                                <button
-                                  key={slot}
-                                  type="button"
-                                  className={`availability-slot-chip ${isActive ? 'is-selected' : ''}`}
-                                  onClick={() => toggleDraftAvailabilitySlot(day, slot)}
-                                >
-                                  {slot}
-                                </button>
-                              )
-                            })}
+                      <div className="availability-days-list">
+                        {availabilityDays.map((day) => (
+                          <div key={day} className="availability-day-row">
+                            <span className="availability-day-label">{day}</span>
+                            <div className="availability-slot-group">
+                              {availabilitySlots.map((slot) => {
+                                const isActive = (draftDayAvailability[day] || []).includes(slot)
+
+                                return (
+                                  <button
+                                    key={slot}
+                                    type="button"
+                                    className={`availability-slot-chip ${isActive ? 'is-selected' : ''}`}
+                                    onClick={() => toggleDraftAvailabilitySlot(day, slot)}
+                                  >
+                                    {slot}
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
 
-                    <footer className="rates-editor-footer availability-footer">
-                      <button type="button" className="rates-save-btn" onClick={saveAvailabilityEditor}>Save</button>
-                    </footer>
+                      <footer className="rates-editor-footer availability-footer">
+                        <button type="button" className="rates-save-btn" onClick={saveAvailabilityEditor}>Save</button>
+                      </footer>
+                    </div>
                   </div>
                 ) : (
-                  <div className="calendar-view">
-                    <div className="calendar-topbar">
-                      <button type="button" className="calendar-nav-btn" aria-label="Previous month" onClick={goToPreviousAvailabilityMonth} disabled={availabilityMonthOffset === 0}>‹</button>
-                      <h4>{viewedMonthLabel}</h4>
-                      <button type="button" className="calendar-nav-btn" aria-label="Next month" onClick={goToNextAvailabilityMonth}>›</button>
-                    </div>
+                  <div className="availability-calendar-overlay" role="dialog" aria-modal="true" aria-label="Select dates">
+                    <section className="availability-calendar-modal" onClick={(event) => event.stopPropagation()}>
+                      <header className="availability-calendar-header">
+                        <h3>Select Dates</h3>
+                        <button type="button" className="availability-calendar-close" onClick={closeAvailabilityEditor} aria-label="Close select dates">
+                          ×
+                        </button>
+                      </header>
 
-                    <div className="calendar-weekdays">
-                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                        <span key={day}>{day}</span>
-                      ))}
-                    </div>
+                      <div className="calendar-view availability-calendar-content">
+                        <div className="calendar-topbar">
+                          <button type="button" className="calendar-nav-btn" aria-label="Previous month" onClick={goToPreviousAvailabilityMonth} disabled={availabilityMonthOffset === 0}>‹</button>
+                          <h4>{viewedMonthLabel}</h4>
+                          <button type="button" className="calendar-nav-btn" aria-label="Next month" onClick={goToNextAvailabilityMonth}>›</button>
+                        </div>
 
-                    <div className="calendar-grid">
-                      {Array.from({ length: viewedMonthFirstDay.getDay() }).map((_, index) => (
-                        <span key={`blank-${index}`} className="calendar-cell blank" />
-                      ))}
-                      {viewedMonthDates.map((date) => {
-                        const dateKey = date.toDateString()
-                        const isPast = date < todayStart
-                        const isSelected = draftAvailableDateKeys.includes(dateKey)
+                        <div className="calendar-weekdays">
+                          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
+                            <span key={day}>{day}</span>
+                          ))}
+                        </div>
 
-                        return (
-                          <button
-                            key={dateKey}
-                            type="button"
-                            className={`calendar-cell ${isPast ? 'is-disabled' : ''} ${isSelected ? 'is-selected' : ''}`}
-                            onClick={() => toggleDraftCalendarDate(date)}
-                            disabled={isPast}
-                          >
-                            {date.getDate()}
-                          </button>
-                        )
-                      })}
-                    </div>
+                        <div className="calendar-grid">
+                          {Array.from({ length: viewedMonthFirstDay.getDay() }).map((_, index) => (
+                            <span key={`blank-${index}`} className="calendar-cell blank" />
+                          ))}
+                          {viewedMonthDates.map((date) => {
+                            const dateKey = date.toDateString()
+                            const isPast = date < todayStart
+                            const isSelected = draftAvailableDateKeys.includes(dateKey)
 
-                    <div className="calendar-actions-row">
-                      <button type="button" className="calendar-select-all-btn" onClick={selectAllRemainingDates}>Select All ✓</button>
-                    </div>
+                            return (
+                              <button
+                                key={dateKey}
+                                type="button"
+                                className={`calendar-cell ${isPast ? 'is-disabled' : ''} ${isSelected ? 'is-selected' : ''}`}
+                                onClick={() => toggleDraftCalendarDate(date)}
+                                disabled={isPast}
+                              >
+                                {date.getDate()}
+                              </button>
+                            )
+                          })}
+                        </div>
 
-                    <footer className="rates-editor-footer availability-footer availability-calendar-footer">
-                      <button type="button" className="calendar-cancel-btn" onClick={closeAvailabilityEditor}>Cancel</button>
-                      <button type="button" className="rates-save-btn" onClick={saveAvailabilityEditor}>Save</button>
-                    </footer>
+                        <div className="calendar-actions-row">
+                          <button type="button" className="calendar-select-all-btn" onClick={selectAllRemainingDates}>Select All ✓</button>
+                        </div>
+
+                        <footer className="rates-editor-footer availability-footer availability-calendar-footer">
+                          <button type="button" className="calendar-cancel-btn" onClick={closeAvailabilityEditor}>Cancel</button>
+                          <button type="button" className="rates-save-btn availability-calendar-save-btn" onClick={saveAvailabilityEditor}>Save</button>
+                        </footer>
+                      </div>
+                    </section>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </section>
 
-          <section className="profile-panel certifications-panel">
+          <section className={`profile-panel certifications-panel ${isCertificationsEditorOpen ? 'is-editing' : ''}`}>
             <div className="panel-header">
-              <h2>Certifications</h2>
+              <h2> Certifications</h2>
               <button type="button" className="rates-edit-btn" onClick={isCertificationsEditorOpen ? closeCertificationsEditor : openCertificationsEditor} aria-label="Edit certifications">
                 <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
               </button>
             </div>
-            <div className="cert-list">
-              {certificationOptions.filter((cert) => cert.selected).map((cert) => (
-                <div key={cert.id} className="cert-item">
-                  <span className="cert-badge">✓</span>
-                  <span>{cert.name}</span>
-                </div>
-              ))}
-            </div>
+            {!isCertificationsEditorOpen && (
+              <div className="cert-list">
+                {certificationOptions.filter((cert) => cert.selected).map((cert) => (
+                  <div key={cert.id} className="cert-item">
+                    <span className="cert-badge"><img src={tickImg} alt="Tick" style={{ width: '21px', height: '21px', display: 'block' }} /></span>
+                    <span>{cert.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {isCertificationsEditorOpen && (
               <div className="panel-inline-editor">
                 <header className="rates-editor-header">
@@ -1185,56 +1329,62 @@ const EventStaffProfile = () => {
                       {cert.optional && <small>Optional</small>}
                     </label>
                   ))}
-
-                  <button type="button" className="rates-save-btn cert-save-btn" onClick={saveCertificationsEditor}>Save</button>
                 </div>
+                <footer className="rates-editor-footer">
+                  <button type="button" className="rates-save-btn cert-save-btn" onClick={saveCertificationsEditor}>Save</button>
+                </footer>
               </div>
             )}
           </section>
 
-          <section className="profile-panel additional-info-panel">
-            <div className="panel-header">
-              <h2>Additional Information</h2>
-              <button type="button" className="rates-edit-btn" onClick={isAdditionalInfoEditorOpen ? closeAdditionalInfoEditor : openAdditionalInfoEditor} aria-label="Edit additional information">
-                <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
-              </button>
-            </div>
-            <div className="info-grid">
-              <div className="info-item">
-                <label>Country of Origin</label>
-                <span>{additionalInfo.countryOfOrigin}</span>
-              </div>
-              <div className="info-item info-languages-item">
-                <label>Languages Spoken</label>
-                <div className="info-languages-chips">
-                  {additionalInfo.languagesSpoken.map((language) => (
-                    <span key={language} className="language-chip">{language}</span>
-                  ))}
-                </div>
-              </div>
-              <div className="info-item">
-                <label>Body Type</label>
-                <span>{additionalInfo.bodyType}</span>
-              </div>
-            </div>
-            {isAdditionalInfoEditorOpen && (
-              <div className="panel-inline-editor">
-                <header className="rates-editor-header">
-                  <h3>Additional Information</h3>
-                  <button type="button" className="rates-editor-close" onClick={closeAdditionalInfoEditor} aria-label="Close additional information editor">
-                    ×
+          <section className={`profile-panel additional-info-panel ${isAdditionalInfoEditorOpen ? 'is-editing' : ''}`}>
+            {!isAdditionalInfoEditorOpen ? (
+              <>
+                <div className="panel-header">
+                  <h2> Additional Information</h2>
+                  <button type="button" className="rates-edit-btn" onClick={isAdditionalInfoEditorOpen ? closeAdditionalInfoEditor : openAdditionalInfoEditor} aria-label="Edit additional information">
+                    <img src={notePencilImg} alt="Edit" style={{ width: '16px', height: '16px' }} />
                   </button>
+                </div>
+                <div className="info-grid">
+                  <div className="info-item">
+                    <label>Country of Origin</label>
+                    <span>{additionalInfo.countryOfOrigin}</span>
+                  </div>
+                  <hr style={{ borderColor: "#d9d9d9" }} />
+                  <div className="info-item info-languages-item">
+                    <label>Languages Spoken</label>
+                    <div className="info-languages-chips">
+                      {additionalInfo.languagesSpoken.map((language) => (
+                        <span key={language} className="language-chip">{language}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <hr style={{ borderColor: "#d9d9d9" }} />
+                  <div className="info-item">
+                    <label>Body Type</label>
+                    <span>{additionalInfo.bodyType}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="panel-inline-editor additional-info-editor-shell">
+                <header className="additional-info-editor-header">
+                  <h3>Additional Information</h3>
+                  <button type="button" className="additional-info-save-btn" onClick={saveAdditionalInfoEditor}>Save</button>
                 </header>
 
-                <div className="rates-editor-list info-editor-list">
-                  <div className="info-editor-block">
-                    <label>Country of Origin</label>
-                    <button type="button" className="dropdown-display" onClick={() => setIsCountryDropdownOpen((current) => !current)}>
-                      <span>{draftAdditionalInfo.countryOfOrigin}</span>
-                      <span>⌄</span>
-                    </button>
+                <div className="additional-info-editor-body">
+                  <div className="additional-info-row additional-info-row--country">
+                    <div className="additional-info-row-main">
+                      <label>Country of Origin</label>
+                      <button type="button" className="dropdown-display" onClick={() => setIsCountryDropdownOpen((current) => !current)}>
+                        <span>{draftAdditionalInfo.countryOfOrigin}</span>
+                        <span>⌄</span>
+                      </button>
+                    </div>
                     {isCountryDropdownOpen && (
-                      <div className="search-results-list dropdown-panel">
+                      <div className="search-results-list dropdown-panel additional-info-dropdown-panel">
                         <input
                           type="text"
                           value={countrySearch}
@@ -1257,8 +1407,10 @@ const EventStaffProfile = () => {
                     )}
                   </div>
 
-                  <div className="info-editor-block">
-                    <div className="info-editor-header-row">
+                  <div className="additional-info-divider" />
+
+                  <div className="additional-info-row additional-info-row--languages">
+                    <div className="additional-info-row-top">
                       <label>Languages Spoken</label>
                       <button type="button" className="add-new-btn" onClick={toggleLanguagePicker}>Add New +</button>
                     </div>
@@ -1294,7 +1446,9 @@ const EventStaffProfile = () => {
                     )}
                   </div>
 
-                  <div className="info-editor-block">
+                  <div className="additional-info-divider" />
+
+                  <div className="additional-info-row additional-info-row--body-type">
                     <label>Body Type</label>
                     <select
                       className="info-select"
@@ -1309,8 +1463,6 @@ const EventStaffProfile = () => {
                       ))}
                     </select>
                   </div>
-
-                  <button type="button" className="rates-save-btn cert-save-btn" onClick={saveAdditionalInfoEditor}>Save</button>
                 </div>
               </div>
             )}
@@ -1338,266 +1490,6 @@ const EventStaffProfile = () => {
           </section>
         </section>
       </div>
-
-      {isRatesEditorOpen && (
-        <div className="rates-editor-overlay" role="dialog" aria-modal="true" aria-label="Rates and Experience editor">
-          <section className="rates-editor-sheet">
-            <header className="rates-editor-header">
-              <h3>Rates and Experience</h3>
-              <button type="button" className="rates-editor-close" onClick={closeRatesEditor} aria-label="Close rates editor">
-                ×
-              </button>
-            </header>
-
-            <div className="rates-editor-list">
-              {draftRateOptions.map((item) => (
-                <article key={item.id} className={`rates-editor-item ${item.selected ? 'is-selected' : 'is-disabled'}`}>
-                  <div className="rates-editor-item-top">
-                    <label className="service-check-row">
-                      <input
-                        type="checkbox"
-                        checked={item.selected}
-                        onChange={() => handleDraftRateToggle(item.id)}
-                      />
-                      <span>{item.service}</span>
-                      {item.label && <small>{item.label}</small>}
-                    </label>
-
-                    <div className="rate-input-wrap">
-                      <span>$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.price}
-                        onChange={(event) => handleDraftRateChange(item.id, 'price', event.target.value)}
-                        disabled={!item.selected}
-                      />
-                      <em>/{item.unit}</em>
-                    </div>
-                  </div>
-
-                  {item.selected && (
-                    <div className="rates-editor-controls">
-                      <select
-                        value={item.confidence}
-                        onChange={(event) => handleDraftRateChange(item.id, 'confidence', event.target.value)}
-                      >
-                        {confidenceOptions.map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={item.eventsRange}
-                        onChange={(event) => handleDraftRateChange(item.id, 'eventsRange', event.target.value)}
-                      >
-                        {eventsOptions.map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </article>
-              ))}
-
-              <button type="button" className="rates-see-more">see more</button>
-            </div>
-
-            <footer className="rates-editor-footer">
-              <button type="button" className="rates-save-btn" onClick={saveRatesEditor}>save</button>
-            </footer>
-          </section>
-        </div>
-      )}
-
-      {isAboutMeEditorOpen && (
-        <div className="rates-editor-overlay" role="dialog" aria-modal="true" aria-label="About me editor">
-          <section className="rates-editor-sheet about-me-editor-sheet">
-            <header className="rates-editor-header">
-              <div>
-                <h3>About Me</h3>
-                <p className="editor-subtitle">Tell your story</p>
-              </div>
-              <button type="button" className="rates-editor-close" onClick={closeAboutMeEditor} aria-label="Close about me editor">
-                ×
-              </button>
-            </header>
-
-            <div className="about-me-editor-content">
-              <textarea
-                className="about-me-textarea"
-                value={draftAboutMeText}
-                onChange={(e) => setDraftAboutMeText(e.target.value)}
-                placeholder="Write your about me section..."
-              />
-              <button type="button" className="rates-save-btn about-me-save-btn" onClick={saveAboutMeEditor}>
-                save
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {isTopSkillsEditorOpen && (
-        <div className="rates-editor-overlay" role="dialog" aria-modal="true" aria-label="Top skills editor">
-          <section className="rates-editor-sheet cert-editor-sheet top-skills-sheet">
-            <header className="rates-editor-header">
-              <div>
-                <h3>Top Skills</h3>
-                <p className="editor-subtitle">Select up to 4 top skills</p>
-              </div>
-              <button type="button" className="rates-editor-close" onClick={closeTopSkillsEditor} aria-label="Close top skills editor">
-                ×
-              </button>
-            </header>
-
-            <div className="rates-editor-list cert-editor-list">
-              {draftTopSkillOptions.map((skill) => (
-                <label key={skill.id} className={`cert-editor-row top-skill-row ${skill.selected ? 'is-selected' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={skill.selected}
-                    disabled={!skill.selected && draftTopSkillOptions.filter((item) => item.selected).length >= 4}
-                    onChange={() => toggleDraftTopSkill(skill.id)}
-                  />
-                  <span>{skill.name}</span>
-                </label>
-              ))}
-
-              <button type="button" className="rates-save-btn cert-save-btn" onClick={saveTopSkillsEditor}>save</button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {isCertificationsEditorOpen && (
-        <div className="rates-editor-overlay" role="dialog" aria-modal="true" aria-label="Certifications editor">
-          <section className="rates-editor-sheet cert-editor-sheet">
-            <header className="rates-editor-header">
-              <h3>Certifications</h3>
-              <button type="button" className="rates-editor-close" onClick={closeCertificationsEditor} aria-label="Close certifications editor">
-                ×
-              </button>
-            </header>
-
-            <div className="rates-editor-list cert-editor-list">
-              {draftCertificationOptions.map((cert) => (
-                <label key={cert.id} className={`cert-editor-row ${cert.selected ? 'is-selected' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={cert.selected}
-                    disabled={!cert.selected && selectedCertificationCount >= 5}
-                    onChange={() => toggleDraftCertification(cert.id)}
-                  />
-                  <span>{cert.name}</span>
-                  {cert.optional && <small>Optional</small>}
-                </label>
-              ))}
-
-              <button type="button" className="rates-save-btn cert-save-btn" onClick={saveCertificationsEditor}>Save</button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {isAdditionalInfoEditorOpen && (
-        <div className="rates-editor-overlay" role="dialog" aria-modal="true" aria-label="Additional information editor">
-          <section className="rates-editor-sheet info-editor-sheet">
-            <header className="rates-editor-header">
-              <h3>Additional Information</h3>
-              <button type="button" className="rates-editor-close" onClick={closeAdditionalInfoEditor} aria-label="Close additional information editor">
-                ×
-              </button>
-            </header>
-
-            <div className="rates-editor-list info-editor-list">
-              <div className="info-editor-block">
-                <label>Country of Origin</label>
-                <button type="button" className="dropdown-display" onClick={() => setIsCountryDropdownOpen((current) => !current)}>
-                  <span>{draftAdditionalInfo.countryOfOrigin}</span>
-                  <span>⌄</span>
-                </button>
-                {isCountryDropdownOpen && (
-                  <div className="search-results-list dropdown-panel">
-                    <input
-                      type="text"
-                      value={countrySearch}
-                      onChange={(event) => {
-                        setCountrySearch(event.target.value)
-                        setDraftAdditionalInfo((current) => ({
-                          ...current,
-                          countryOfOrigin: event.target.value
-                        }))
-                      }}
-                      placeholder="Search country"
-                      className="info-search-input"
-                    />
-                    {filteredCountries.slice(0, 10).map((country) => (
-                      <button key={country} type="button" className="search-result-row" onClick={() => selectDraftCountry(country)}>
-                        {country}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="info-editor-block">
-                <div className="info-editor-header-row">
-                  <label>Languages Spoken</label>
-                  <button type="button" className="add-new-btn" onClick={toggleLanguagePicker}>Add New +</button>
-                </div>
-
-                <div className="selected-chip-row">
-                  {draftAdditionalInfo.languagesSpoken.map((language) => (
-                    <span key={language} className="language-chip language-chip-editable">
-                      {language}
-                      <button type="button" onClick={() => removeDraftLanguage(language)} aria-label={`Remove ${language}`}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                {isLanguagePickerOpen && (
-                  <>
-                    <input
-                      type="text"
-                      value={languageSearch}
-                      onChange={(event) => setLanguageSearch(event.target.value)}
-                      placeholder="Search language"
-                      className="info-search-input"
-                    />
-                    <div className="search-results-list">
-                      {filteredLanguages.map((language) => (
-                        <button key={language} type="button" className="search-result-row" onClick={() => addDraftLanguage(language)}>
-                          {language}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="info-editor-block">
-                <label>Body Type</label>
-                <select
-                  value={draftAdditionalInfo.bodyType}
-                  onChange={(event) => setDraftAdditionalInfo((current) => ({ ...current, bodyType: event.target.value }))}
-                  className="info-select"
-                >
-                  {bodyTypeOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button type="button" className="rates-save-btn cert-save-btn" onClick={saveAdditionalInfoEditor}>Save</button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="rates-editor-overlay">
           <section className="rates-editor-sheet">
@@ -1620,97 +1512,115 @@ const EventStaffProfile = () => {
           </section>
         </div>
       )}
-
-      {/* Voice Note Modal */}
       {isVoiceNoteModalOpen && (
-        <div className="rates-editor-overlay">
-          <section className="rates-editor-sheet">
-            <div className="modal-header">
-              <h3>Record Voice Note</h3>
-              <button type="button" className="modal-close-btn" onClick={closeVoiceNoteModal}>×</button>
+        <div className="voice-note-overlay">
+          <section className="voice-note-modal" role="dialog" aria-modal="true" aria-label="Add Voice Note">
+            <div className="voice-note-header">
+              <h3>Add Voice Note</h3>
+              <button type="button" className="voice-note-close" onClick={closeVoiceNoteModal} aria-label="Close voice note modal">×</button>
             </div>
-            <div className="modal-body">
-              {!recordedAudio && !isRecording && (
-                <>
-                  <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎤</div>
-                    <p style={{ color: '#666', marginBottom: '12px' }}>Start Recording your voice note.</p>
-                    <p style={{ color: '#999', fontSize: '14px' }}>Maximum duration is 30 seconds.</p>
+
+            <div className="voice-note-tabs" role="tablist" aria-label="Voice note input mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={voiceNoteMode === 'record'}
+                className={`voice-note-tab ${voiceNoteMode === 'record' ? 'is-active' : ''}`}
+                onClick={() => setVoiceNoteMode('record')}
+              >
+                Record
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={voiceNoteMode === 'upload'}
+                className={`voice-note-tab ${voiceNoteMode === 'upload' ? 'is-active' : ''}`}
+                onClick={() => setVoiceNoteMode('upload')}
+              >
+                Upload
+              </button>
+            </div>
+
+            <div className="voice-note-body">
+              {voiceNoteMode === 'record' && !isRecording && !recordedAudio && (
+                <div className="voice-note-empty-state">
+                  <div className="voice-note-icon-wrap">
+                    <img src={microphoneImg} alt="Microphone" className="voice-note-icon" />
                   </div>
-                </>
+                  <button type="button" className="voice-note-primary-btn" onClick={startRecording}>Start Recording</button>
+                  <p className="voice-note-helper">Click the button to start recording your voice note. Maximum duration is 30 seconds.</p>
+                </div>
               )}
 
-              {isRecording && (
-                <>
-                  <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>🎤</div>
-                    <p style={{ color: '#ef195f', fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-                      {Math.floor(recordingDuration / 60).toString().padStart(2, '0')}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                    </p>
-                    <p style={{ color: '#666' }}>Recording...</p>
+              {voiceNoteMode === 'record' && isRecording && (
+                <div className="voice-note-recording-state">
+                  <div className="voice-note-recording-badge">
+                    <img src={microphoneImg} alt="Microphone" className="voice-note-icon voice-note-icon--inverse" />
                   </div>
-                </>
+                  <div className="voice-note-time">{Math.floor(recordingDuration / 60).toString().padStart(2, '0')}:{(recordingDuration % 60).toString().padStart(2, '0')}</div>
+                  <div className="voice-note-status">Recording...</div>
+                  <button type="button" className="voice-note-primary-btn voice-note-primary-btn--small" onClick={stopRecording}>Stop</button>
+                  <p className="voice-note-helper voice-note-helper--compact">Maximum duration is 30 seconds.</p>
+                </div>
               )}
 
-              {recordedAudio && !isRecording && (
-                <>
-                  <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>▶️</div>
-                    <p style={{ color: '#666', marginBottom: '16px' }}>
-                      {Math.floor(recordingDuration / 60).toString().padStart(2, '0')}:{(recordingDuration % 60).toString().padStart(2, '0')} Sec
-                    </p>
-                    <audio controls src={recordedAudio} style={{ marginBottom: '16px', width: '100%' }} />
+              {voiceNoteMode === 'record' && recordedAudio && !isRecording && (
+                <div className="voice-note-recorded-state">
+                  <div className="voice-note-recording-badge">
+                    <span className="voice-note-play-icon">▶</span>
                   </div>
-                </>
-              )}
-
-              {!recordedAudio && !isRecording && (
-                <>
-                  <div style={{ marginTop: '16px', padding: '20px', border: '2px dashed #ddd', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', backgroundColor: '#f9f9f9' }}>
-                    <p style={{ color: '#666', marginBottom: '12px' }}>Drag and drop your file here or</p>
-                    <button type="button" className="rates-save-btn" onClick={() => voiceNoteInputRef.current?.click()}>
-                      Select File
+                  <div className="voice-note-time">{Math.max(Math.round(recordingDuration || 0), 1)} Sec</div>
+                  <div className="voice-note-status">Recorded</div>
+                  <div className="voice-note-actions-row">
+                    <button type="button" className="voice-note-secondary-btn" onClick={() => { setRecordedAudio(null); setRecordingDuration(0); setVoiceNoteDraftName('') }}>
+                      Record Again
                     </button>
-                    <input
-                      ref={voiceNoteInputRef}
-                      type="file"
-                      accept="audio/*"
-                      onChange={handleVoiceNoteUpload}
-                      style={{ display: 'none' }}
-                    />
-                    <p style={{ color: '#999', fontSize: '12px', marginTop: '12px' }}>
-                      Supported formats: MP3, WAV, M4A (max 30 megabytes)
-                    </p>
+                    <button type="button" className="voice-note-primary-btn" onClick={saveVoiceNote}>Save</button>
                   </div>
-                </>
+                  <p className="voice-note-helper voice-note-helper--compact">Maximum duration is 30 seconds.</p>
+                </div>
               )}
-            </div>
-            <div className="modal-actions">
-              {!recordedAudio && !isRecording && (
-                <button type="button" className="rates-save-btn" onClick={startRecording}>Record</button>
-              )}
-              {isRecording && (
-                <button type="button" className="rates-save-btn" onClick={stopRecording}>Stop</button>
-              )}
-              {recordedAudio && !isRecording && (
-                <>
-                  <button type="button" className="modal-cancel-btn" onClick={() => { setRecordedAudio(null); setRecordingDuration(0); }}>
-                    Record Again
+
+              {voiceNoteMode === 'upload' && !recordedAudio && (
+                <div className="voice-note-upload-box">
+                  <div className="voice-note-upload-icon-wrap">
+                    <span className="voice-note-upload-icon">⇪</span>
+                  </div>
+                  <p className="voice-note-upload-text">Drop your audio file here<br />or click to browse</p>
+                  <button type="button" className="voice-note-primary-btn" onClick={() => voiceNoteInputRef.current?.click()}>
+                    Select File
                   </button>
-                  <button type="button" className="rates-save-btn" onClick={saveVoiceNote}>Save</button>
-                </>
+                  <input
+                    ref={voiceNoteInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleVoiceNoteUpload}
+                    className="voice-note-file-input"
+                  />
+                  <p className="voice-note-helper voice-note-helper--compact">Supported formats: MP3, WAV, M4A (max 5MB)</p>
+                </div>
+              )}
+
+              {voiceNoteMode === 'upload' && recordedAudio && !isRecording && (
+                <div className="voice-note-recorded-state">
+                  <div className="voice-note-recording-badge">
+                    <span className="voice-note-play-icon">▶</span>
+                  </div>
+                  <div className="voice-note-time">Uploaded</div>
+                  <div className="voice-note-status">{voiceNoteDraftName || 'Audio file selected'}</div>
+                  <div className="voice-note-actions-row">
+                    <button type="button" className="voice-note-secondary-btn" onClick={() => { setRecordedAudio(null); setVoiceNoteDraftName('') }}>
+                      Select Another
+                    </button>
+                    <button type="button" className="voice-note-primary-btn" onClick={saveVoiceNote}>Save</button>
+                  </div>
+                  <p className="voice-note-helper voice-note-helper--compact">Supported formats: MP3, WAV, M4A (max 5MB)</p>
+                </div>
               )}
             </div>
           </section>
         </div>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
     </main>
   )
 }

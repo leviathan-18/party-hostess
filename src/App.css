@@ -37,7 +37,7 @@
   transform: rotate(0deg);
   opacity: 1;
   display: block;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: 'Inter', "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-style: normal;
   font-size: min(2.8rem, 6.8vw);
   line-height: 1.01;
@@ -94,7 +94,7 @@
 .policy-section p,
 .policy-section li {
   margin: 0;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: 'Inter', "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-weight: 400;
   font-style: normal;
   font-size: 1.08rem;
