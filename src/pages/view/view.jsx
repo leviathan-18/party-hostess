@@ -104,8 +104,6 @@ const EventStaffProfile = () => {
   const [availabilityMonthOffset, setAvailabilityMonthOffset] = useState(0)
   const [isAboutMeEditorOpen, setIsAboutMeEditorOpen] = useState(false)
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false)
-  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false)
-  const [countrySearch, setCountrySearch] = useState('')
   const [languageSearch, setLanguageSearch] = useState('')
   const [isPublicVisible, setIsPublicVisible] = useState(() => readStoredValue('party-hostess-public-visible', true))
   const [isInstantBook, setIsInstantBook] = useState(() => readStoredValue('party-hostess-instant-book', true))
@@ -373,10 +371,8 @@ const EventStaffProfile = () => {
 
   const openAdditionalInfoEditor = () => {
     setDraftAdditionalInfo(additionalInfo)
-    setCountrySearch(additionalInfo.countryOfOrigin)
     setLanguageSearch('')
     setIsLanguagePickerOpen(false)
-    setIsCountryDropdownOpen(false)
     setIsAdditionalInfoEditorOpen(true)
   }
 
@@ -389,22 +385,9 @@ const EventStaffProfile = () => {
     setIsAdditionalInfoEditorOpen(false)
   }
 
-  const filteredCountries = countryOptions.filter((country) =>
-    country.toLowerCase().includes(countrySearch.toLowerCase())
-  )
-
   const filteredLanguages = languageOptions.filter((language) =>
     language.toLowerCase().includes(languageSearch.toLowerCase())
   )
-
-  const selectDraftCountry = (country) => {
-    setDraftAdditionalInfo((current) => ({
-      ...current,
-      countryOfOrigin: country
-    }))
-    setCountrySearch(country)
-    setIsCountryDropdownOpen(false)
-  }
 
   const toggleLanguagePicker = () => {
     setIsLanguagePickerOpen((current) => !current)
@@ -1189,7 +1172,6 @@ const EventStaffProfile = () => {
                     <header className="rates-editor-header availability-inline-header">
                       <div>
                         <h3>Available Dates</h3>
-                        <p className="editor-subtitle">Select the days and time slots you are available.</p>
                       </div>
                     </header>
 
@@ -1319,12 +1301,19 @@ const EventStaffProfile = () => {
                 <div className="rates-editor-list cert-editor-list">
                   {draftCertificationOptions.map((cert) => (
                     <label key={cert.id} className={`cert-editor-row ${cert.selected ? 'is-selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={cert.selected}
+                      <button
+                        type="button"
+                        className={`cert-checkbox-btn ${cert.selected ? 'is-selected' : ''}`}
+                        onClick={() => toggleDraftCertification(cert.id)}
+                        aria-pressed={cert.selected}
                         disabled={!cert.selected && selectedCertificationCount >= 5}
-                        onChange={() => toggleDraftCertification(cert.id)}
-                      />
+                      >
+                        {cert.selected ? (
+                          <img src={tickImg} alt="Selected" style={{ width: '100%', height: '100%' }} />
+                        ) : (
+                          <span className="cert-checkbox-empty" />
+                        )}
+                      </button>
                       <span>{cert.name}</span>
                       {cert.optional && <small>Optional</small>}
                     </label>
@@ -1376,35 +1365,19 @@ const EventStaffProfile = () => {
 
                 <div className="additional-info-editor-body">
                   <div className="additional-info-row additional-info-row--country">
-                    <div className="additional-info-row-main">
-                      <label>Country of Origin</label>
-                      <button type="button" className="dropdown-display" onClick={() => setIsCountryDropdownOpen((current) => !current)}>
-                        <span>{draftAdditionalInfo.countryOfOrigin}</span>
-                        <span>⌄</span>
-                      </button>
-                    </div>
-                    {isCountryDropdownOpen && (
-                      <div className="search-results-list dropdown-panel additional-info-dropdown-panel">
-                        <input
-                          type="text"
-                          value={countrySearch}
-                          onChange={(event) => {
-                            setCountrySearch(event.target.value)
-                            setDraftAdditionalInfo((current) => ({
-                              ...current,
-                              countryOfOrigin: event.target.value
-                            }))
-                          }}
-                          placeholder="Search country"
-                          className="info-search-input"
-                        />
-                        {filteredCountries.slice(0, 10).map((country) => (
-                          <button key={country} type="button" className="search-result-row" onClick={() => selectDraftCountry(country)}>
-                            {country}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <label>Country of Origin</label>
+                    <select
+                      className="info-select"
+                      value={draftAdditionalInfo.countryOfOrigin}
+                      onChange={(event) => setDraftAdditionalInfo((current) => ({
+                        ...current,
+                        countryOfOrigin: event.target.value
+                      }))}
+                    >
+                      {countryOptions.map((country) => (
+                        <option key={country} value={country}>{country}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="additional-info-divider" />

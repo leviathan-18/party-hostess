@@ -617,7 +617,7 @@
 
 .rates-editor-header h3 {
   margin: 0;
-  font-size: 19px;
+  font-size: 15px;
   line-height: 1.2;
   color: #333;
   font-weight: 700;
@@ -873,8 +873,8 @@
 
 .additional-info-editor-header h3 {
   margin: 0;
-  font-size: 20px;
-  line-height: 1.15;
+  font-size: 15px;
+  line-height: 1.2;
   color: #2b2b2b;
   font-weight: 700;
 }
@@ -899,6 +899,8 @@
 }
 
 .additional-info-row {
+  display:flex;
+  justify-content: space-between;
   padding: 14px 0;
 }
 
@@ -1197,6 +1199,7 @@
   padding: 0 16px 8px;
   font-size: 13px;
   color: #666;
+  flex-direction:column;
 }
 
 .availability-summary-row strong {
@@ -1377,10 +1380,29 @@
 }
 
 
-.cert-editor-row input {
-  width: 18px;
-  height: 18px;
-  accent-color: #ef195f;
+.cert-editor-row .cert-checkbox-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.cert-editor-row .cert-checkbox-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cert-editor-row .cert-checkbox-empty {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
 }
 
 .top-skills-sheet .cert-editor-row {
@@ -1469,7 +1491,7 @@
 
 .info-search-input,
 .info-select {
-  width: 100%;
+  width: 22%;
   height: 36px;
   border: 1px solid #d8d8d8;
   border-radius: 8px;
@@ -1975,7 +1997,7 @@
   }
 
   .rates-editor-header h3 {
-    font-size: 28px;
+    font-size: 15px;
   }
 
   .service-check-row {
@@ -2338,7 +2360,7 @@
   }
 
   .rates-editor-header h3 {
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .availability-sheet {
@@ -2442,7 +2464,7 @@
   }
 
   .rates-editor-header h3 {
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .rates-editor-close {
